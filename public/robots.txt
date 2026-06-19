@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Block member/admin/trainer panels — no value for search engines
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /trainer
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /trainer/
+
+Sitemap: https://thejohnfitness.com/sitemap.xml
