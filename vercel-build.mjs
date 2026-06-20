@@ -11,15 +11,19 @@ fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(`${out}/functions/index.func`, { recursive: true });
 fs.mkdirSync(`${out}/static`, { recursive: true });
 
-// 3. Static files
+// 3. Static files → .vercel/output/static
 fs.cpSync("dist/client", `${out}/static`, { recursive: true });
 
-// 4. Server bundle
+// 4. Server bundle → function directory
 fs.cpSync("dist/server", `${out}/functions/index.func`, { recursive: true });
 
-// 5. Node.js adapter — converts Web Fetch handler → Node.js http handler
-//    server.js exports { default: { fetch(request) => Response } }
-fs.writeFileSync(`${out}/functions/index.func/_node_handler.js`, `
+// 5. CRITICAL: package.json with "type":"module" so Node.js treats .js as ESM
+fs.writeFileSync(`${out}/functions/index.func/package.json`, JSON.stringify({
+  type: "module"
+}, null, 2));
+
+// 6. Node.js adapter — wraps fetch handler into Node.js (req, res)
+fs.writeFileSync(`${out}/functions/index.func/_handler.mjs`, `
 import server from "./server.js";
 
 export default async function handler(req, res) {
@@ -34,7 +38,6 @@ export default async function handler(req, res) {
       req.on("end", resolve);
       req.on("error", reject);
     });
-    const body = chunks.length ? Buffer.concat(chunks) : undefined;
 
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) {
@@ -42,9 +45,9 @@ export default async function handler(req, res) {
     }
 
     const webReq = new Request(url.toString(), {
-      method:  req.method,
+      method: req.method,
       headers,
-      body: ["GET","HEAD"].includes(req.method) ? undefined : body,
+      body: ["GET","HEAD"].includes(req.method) ? undefined : Buffer.concat(chunks),
       duplex: "half",
     });
 
@@ -52,37 +55,32 @@ export default async function handler(req, res) {
 
     res.statusCode = webRes.status;
     webRes.headers.forEach((v, k) => res.setHeader(k, v));
-
-    const buf = await webRes.arrayBuffer();
-    res.end(Buffer.from(buf));
+    res.end(Buffer.from(await webRes.arrayBuffer()));
   } catch (err) {
-    console.error("[handler]", err);
+    console.error("[ssr]", err);
     res.statusCode = 500;
-    res.end("Internal Server Error");
+    res.end("Internal Server Error: " + err.message);
   }
 }
 `);
 
-// 6. Function config pointing to the Node.js adapter
+// 7. Function config — point to .mjs handler, no launchMode
 fs.writeFileSync(`${out}/functions/index.func/.vc-config.json`, JSON.stringify({
   runtime: "nodejs20.x",
-  handler: "_node_handler.js",
+  handler: "_handler.mjs",
   maxDuration: 30
 }, null, 2));
 
-// 7. Output routing config
+// 8. Routing
 fs.writeFileSync(`${out}/config.json`, JSON.stringify({
   version: 3,
   routes: [
-    // Cache static assets permanently
     {
       src: "^/assets/(.+)$",
       headers: { "cache-control": "public,max-age=31536000,immutable" },
       continue: true
     },
-    // Serve static files from dist/client if they exist
     { handle: "filesystem" },
-    // Everything else → SSR function
     { src: "/(.*)", dest: "/" }
   ]
 }, null, 2));
