@@ -119,7 +119,7 @@ function Home() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-2 md:items-center md:py-28">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold tracking-[0.2em] text-primary">
-              <Zap className="h-3 w-3 fill-primary" /> NASHIK'S PREMIER FITNESS HUB
+              <Zap className="h-3 w-3 fill-primary" /> MUMBAI'S PREMIER FITNESS HUB
             </div>
             <h1 className="font-display text-4xl leading-[0.95] text-foreground sm:text-5xl md:text-8xl">
               STRONGER<br/>TODAY<span className="text-primary">.</span><br/>
