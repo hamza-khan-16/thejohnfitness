@@ -2,9 +2,19 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+// On Node.js < 22, WebSocket is not native — polyfill with ws package so
+// Supabase Realtime works correctly during SSR without warnings.
+const globalForWs = globalThis as any;
+if (typeof globalForWs.WebSocket === 'undefined') {
+  try {
+    // Use require() so this works in both ESM and CJS server bundles
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ws = require('ws');
+    globalForWs.WebSocket = ws.default ?? ws;
+  } catch { /* ws not available — realtime will warn but still work */ }
+}
+
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
   const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
 
@@ -23,14 +33,15 @@ function createSupabaseClient() {
       storage: typeof window !== 'undefined' ? localStorage : undefined,
       persistSession: true,
       autoRefreshToken: true,
-    }
+    },
+    realtime: {
+      transport: globalForWs.WebSocket,
+    },
   });
 }
 
 let _supabase: ReturnType<typeof createSupabaseClient> | undefined;
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
 export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>, {
   get(_, prop, receiver) {
     if (!_supabase) _supabase = createSupabaseClient();

@@ -31,6 +31,11 @@ fs.cpSync("dist/client", `${out}/static`, { recursive: true });
 // 5. CJS bundle into function (no node_modules needed — everything is inlined)
 fs.copyFileSync("dist/server/server-bundle.cjs", `${out}/functions/index.func/server-bundle.cjs`);
 
+// Also copy ws since it's loaded dynamically (not bundled by esbuild)
+const wsDir = `${out}/functions/index.func/node_modules/ws`;
+fs.mkdirSync(wsDir, { recursive: true });
+fs.cpSync("node_modules/ws", wsDir, { recursive: true });
+
 // 6. No "type":"module" — CJS doesn't need it
 fs.writeFileSync(`${out}/functions/index.func/package.json`, JSON.stringify({}), null, 2);
 
