@@ -8,21 +8,33 @@ execSync("npx vite build", { stdio: "inherit" });
 // 2. Create .vercel/output structure
 const out = ".vercel/output";
 fs.rmSync(out, { recursive: true, force: true });
-fs.mkdirSync(`${out}/functions/index.func`, { recursive: true });
+fs.mkdirSync(`${out}/functions/index.func/node_modules`, { recursive: true });
 fs.mkdirSync(`${out}/static`, { recursive: true });
 
-// 3. Static files → .vercel/output/static
+// 3. Static files
 fs.cpSync("dist/client", `${out}/static`, { recursive: true });
 
-// 4. Server bundle → function directory
+// 4. Server bundle
 fs.cpSync("dist/server", `${out}/functions/index.func`, { recursive: true });
 
-// 5. CRITICAL: package.json with "type":"module" so Node.js treats .js as ESM
+// 5. Copy the external packages the server bundle needs at runtime.
+//    These can't be npm installed (h3-v2 is a local prerelease, not on npm).
+const runtimePackages = ["h3-v2", "seroval", "h3"];
+for (const pkg of runtimePackages) {
+  const src = `node_modules/${pkg}`;
+  const dest = `${out}/functions/index.func/node_modules/${pkg}`;
+  if (fs.existsSync(src)) {
+    console.log(`▶ Copying ${pkg}...`);
+    fs.cpSync(src, dest, { recursive: true });
+  }
+}
+
+// 6. package.json with type:module (no dependencies — we copied them manually)
 fs.writeFileSync(`${out}/functions/index.func/package.json`, JSON.stringify({
   type: "module"
 }, null, 2));
 
-// 6. Node.js adapter — wraps fetch handler into Node.js (req, res)
+// 7. Node.js adapter
 fs.writeFileSync(`${out}/functions/index.func/_handler.mjs`, `
 import server from "./server.js";
 
@@ -52,7 +64,6 @@ export default async function handler(req, res) {
     });
 
     const webRes = await server.fetch(webReq);
-
     res.statusCode = webRes.status;
     webRes.headers.forEach((v, k) => res.setHeader(k, v));
     res.end(Buffer.from(await webRes.arrayBuffer()));
@@ -64,14 +75,14 @@ export default async function handler(req, res) {
 }
 `);
 
-// 7. Function config — point to .mjs handler, no launchMode
+// 8. Function config
 fs.writeFileSync(`${out}/functions/index.func/.vc-config.json`, JSON.stringify({
   runtime: "nodejs20.x",
   handler: "_handler.mjs",
   maxDuration: 30
 }, null, 2));
 
-// 8. Routing
+// 9. Routing
 fs.writeFileSync(`${out}/config.json`, JSON.stringify({
   version: 3,
   routes: [
